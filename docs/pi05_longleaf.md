@@ -1,6 +1,20 @@
 # Longleaf pretrained inference runbook
 
-Status: launcher syntax checked locally; account access, package installation, GPU execution, and SSH forwarding remain unverified. No credentials are stored here. Username: `akil@longleaf.unc.edu`. Enter password/MFA in the normal SSH flow, never in chat.
+Status: authenticated login access verified on 2026-11-02; package installation, GPU execution, and compute-node SSH forwarding remain unverified. The account has existing /work/users/a/k/akil storage and visible A100/L40 partitions. No credentials are stored here. Username: `akil@longleaf.unc.edu`. Enter password/MFA in the normal SSH flow, never in chat.
+
+## Scheduled setup for this account
+
+The prepared `scripts/pi05/setup_longleaf.sbatch` uses CPU-only `datamover` for dependency and checkpoint downloads: one task, two CPUs, 16 GB RAM, and a two-hour limit. It purges modules and loads the available python/3.12.4 module to bootstrap uv 0.9.5; OpenPI itself uses managed Python 3.11. It creates no model or inference workload. Keep all caches in `/work/users/a/k/akil/pi05`, outside home storage. UNC reserves login nodes for basic commands and submission and identifies datamover for extensive downloads. [UNC job-submission and partition standards](https://help.rc.unc.edu/getting-started-on-longleaf/#job-submission)
+
+The upstream revision inspected for this setup is `215abfb217dbac7d5f1273282331b9b1866c0479`. Once resource approval is granted, submit from the staged project root:
+
+```bash
+cd /work/users/a/k/akil/pi05
+export OPENPI_REV=215abfb217dbac7d5f1273282331b9b1866c0479
+sbatch scripts/pi05/setup_longleaf.sbatch
+```
+
+Inspect `pi05-setup-JOBID.log` and `setup/JOBID-*.json`. Require status success and downloaded checkpoint params/assets before requesting a GPU. Inference can use `sbatch --time=01:00:00 scripts/pi05/serve_longleaf.sbatch` after exporting the required paths below. Request user approval for resource-intensive jobs before submission; release the GPU with scancel once testing is complete. No GPU research workloads run on login nodes.
 
 ## Prepare the environment
 

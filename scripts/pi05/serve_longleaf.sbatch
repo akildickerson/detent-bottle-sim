@@ -3,11 +3,13 @@
 #SBATCH --partition=a100-gpu,l40-gpu
 #SBATCH --qos=gpu_access
 #SBATCH --gres=gpu:1
+#SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
 #SBATCH --time=02:00:00
 #SBATCH --output=pi05-%j.log
 set -euo pipefail
+module purge
 : "${SLURM_JOB_ID:?Submit this script through Slurm}"
 : "${OPENPI_ROOT:?Set absolute path to the prepared OpenPI checkout}"
 : "${OPENPI_REV:?Set the full 40-character commit SHA recorded at setup}"
@@ -15,6 +17,8 @@ set -euo pipefail
 : "${PI05_RUN_ROOT:?Set directory for job metadata on research storage}"
 export PI05_PORT="${PI05_PORT:-8000}"
 export PYTHONUNBUFFERED=1
+export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-4}"
+export OPENBLAS_NUM_THREADS=1
 [[ "$OPENPI_REV" =~ ^[0-9a-f]{40}$ ]] || { echo 'OPENPI_REV must be a full SHA' >&2; exit 2; }
 [[ "$PI05_PORT" =~ ^[0-9]+$ ]] && (( PI05_PORT > 0 && PI05_PORT < 65536 )) || exit 2
 cd "$OPENPI_ROOT"
