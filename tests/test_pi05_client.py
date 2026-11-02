@@ -27,10 +27,22 @@ class HangingConnection:
         time.sleep(30)
 
 
+class MetadataPolicy(FakePolicy):
+    def get_server_metadata(self):
+        return {'revision': 'pinned-test', 'action_horizon': 15,
+                'sampling': {'rng_controlled': False}}
+
+
+class InvalidMetadataPolicy(FakePolicy):
+    def get_server_metadata(self):
+        return ['invalid handshake metadata']
+
+
 def test_success_reuses_worker_and_closes():
     client = Client(policy_factory=FakePolicy, timeout=5)
     assert client._process is None
     np.testing.assert_array_equal(client.infer({}), np.ones((15, 8)))
+    assert client.server_metadata == {}
     pid = client._process.pid
     client.infer({'value': 2})
     assert client._process.pid == pid
@@ -71,3 +83,20 @@ def test_bad_response_or_worker_failure_closes(obs, error):
 def test_invalid_deadline(timeout):
     with pytest.raises(ValueError):
         Client(timeout=timeout)
+
+
+def test_public_server_metadata_survives_worker_and_close():
+    with Client(policy_factory=MetadataPolicy, timeout=5) as client:
+        assert client.server_metadata == {}
+        client.infer({})
+        assert client.server_metadata == {'revision': 'pinned-test', 'action_horizon': 15,
+                                          'sampling': {'rng_controlled': False}}
+    assert client.server_metadata['revision'] == 'pinned-test'
+
+
+def test_malformed_server_metadata_closes_client():
+    client = Client(policy_factory=InvalidMetadataPolicy, timeout=5)
+    with pytest.raises(ValueError, match='metadata must be a dictionary'):
+        client.infer({})
+    assert not client._process.is_alive()
+    assert client.server_metadata == {}

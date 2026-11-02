@@ -6,6 +6,8 @@
 #SBATCH --mem=16G
 #SBATCH --time=02:00:00
 #SBATCH --output=pi05-setup-%j.log
+#SBATCH --mail-user=akil@unc.edu
+#SBATCH --mail-type=END,FAIL
 # UNC documents datamover for large internet downloads:
 # https://help.rc.unc.edu/getting-started-on-longleaf
 set -euo pipefail

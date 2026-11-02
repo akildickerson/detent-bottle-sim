@@ -1,6 +1,6 @@
 # Longleaf pretrained inference runbook
 
-Status: authenticated login access verified on 2026-11-02; package installation, GPU execution, and compute-node SSH forwarding remain unverified. The account has existing /work/users/a/k/akil storage and visible A100/L40 partitions. No credentials are stored here. Username: `akil@longleaf.unc.edu`. Enter password/MFA in the normal SSH flow, never in chat.
+Status: authenticated access, package installation, GPU inference, and forwarding were verified on 2026-11-02. Setup job7876955 completed; GPU job7880140 passed synthetic and real-observation inference and was intentionally cancelled to release its L40S. The account has existing /work/users/a/k/akil storage and visible A100/L40 partitions. No credentials are stored here. Username: `akil@longleaf.unc.edu`. Enter password/MFA in the normal SSH flow, never in chat.
 
 ## Scheduled setup for this account
 
@@ -13,6 +13,8 @@ cd /work/users/a/k/akil/pi05
 export OPENPI_REV=215abfb217dbac7d5f1273282331b9b1866c0479
 sbatch scripts/pi05/setup_longleaf.sbatch
 ```
+
+Both launchers request Slurm END/FAIL notifications to `akil@unc.edu`. CPU setup job `7876955` was submitted with user approval.
 
 Inspect `pi05-setup-JOBID.log` and `setup/JOBID-*.json`. Require status success and downloaded checkpoint params/assets before requesting a GPU. Inference can use `sbatch --time=01:00:00 scripts/pi05/serve_longleaf.sbatch` after exporting the required paths below. Request user approval for resource-intensive jobs before submission; release the GPU with scancel once testing is complete. No GPU research workloads run on login nodes.
 
@@ -83,3 +85,9 @@ Install the lightweight `packages/openpi-client` from the same OpenPI commit int
 The smoke script sends actual camera/proprioception observations without advancing robot motion. Require finite `(15,8)` output and save the inputs/output/latencies before trying a short hybrid episode. Upstream also supplies `examples/simple_client/main.py --env droid` for random-observation network tests. [OpenPI simple client](https://github.com/Physical-Intelligence/openpi/blob/main/examples/simple_client/main.py)
 
 Cancel unused allocations with `scancel JOBID`. Keep job logs, revision, dependency list, GPU information, warmup output, and subsequent smoke artifacts together. A successful smoke test establishes inference compatibility, not bottle-opening competence.
+
+## Observed resource usage
+
+Setup job7876955 completed in 7m36s. Slurm reported batch MaxRSS 21,299,112 KiB despite its 16 GB request; use at least 24 GB for a repeat setup/download job and obtain approval for that new allocation. GPU job7880140 used batch MaxRSS 31,598,160 KiB and GPU memory 34,565 MiB after inference, so the tested full L40S has appropriate VRAM. Keep host-memory headroom in mind for longer evaluations. No follow-up allocation is automatically authorized by these measurements.
+
+The working forwarding topology used the authenticated login connection, an SSH local forward on the login host to compute-node loopback, then a local forward through the same login host. The GPU model ran only on the allocated compute node. Both temporary forwards were removed after the test; repeat authentication/forwarding deliberately for a future job.

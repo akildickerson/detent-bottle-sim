@@ -54,6 +54,7 @@ def main():
                   'shape': list(result.shape) if result is not None else None,
                   'finite': bool(np.isfinite(result).all()) if result is not None else False,
                   'latencies': client.latencies, 'wall_s': time.monotonic() - start}
+        report['server_metadata'] = client.server_metadata
         (out / 'result.json').write_text(json.dumps(report, indent=2))
     print(json.dumps(report, indent=2))
     if error: raise SystemExit(1)

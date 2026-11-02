@@ -12,7 +12,9 @@ def _serve(requests, replies, host, port, policy_factory):
             from openpi_client.websocket_client_policy import WebsocketClientPolicy
             policy_factory = WebsocketClientPolicy
         policy = policy_factory(host=host, port=port)
-        replies.send(('ready', None))
+        metadata_getter = getattr(policy, 'get_server_metadata', None)
+        metadata = metadata_getter() if callable(metadata_getter) else {}
+        replies.send(('ready', metadata))
         while True:
             observation = requests.get()
             replies.send(('result', policy.infer(observation)))
@@ -39,6 +41,7 @@ class Client:
         self.timeout = self._positive(timeout)
         self.connection_timeout = self._positive(timeout if connection_timeout is None else connection_timeout)
         self.latencies = []
+        self.server_metadata = {}
         self._factory = policy_factory
         self._process = self._requests = self._replies = None
         self._closed = False
@@ -71,9 +74,12 @@ class Client:
             self._process.start()
         finally:
             child_reply.close()
-        kind, _ = self._receive(self.connection_timeout)
+        kind, metadata = self._receive(self.connection_timeout)
         if kind != 'ready':
             raise RuntimeError('Invalid OpenPI worker handshake')
+        if not isinstance(metadata, dict):
+            raise ValueError('OpenPI server metadata must be a dictionary')
+        self.server_metadata = metadata
 
     def infer(self, observation):
         if self._closed:

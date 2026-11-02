@@ -192,6 +192,7 @@ def run_episode(out, controller, episode, config):
                  'sim_s': sim.data.time if sim else 0, 'wall_s': time.monotonic() - start,
                  'initial_fingerprint': fingerprint, 'workspace_clips': adapter.clips if adapter else 0,
                  'latencies': client.latencies if client else []}
+        final['server_metadata'] = client.server_metadata if client else {}
         (out / 'final.json').write_text(json.dumps(final, indent=2))
         if client:
             client.close()

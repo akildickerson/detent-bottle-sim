@@ -8,6 +8,8 @@
 #SBATCH --mem=32G
 #SBATCH --time=02:00:00
 #SBATCH --output=pi05-%j.log
+#SBATCH --mail-user=akil@unc.edu
+#SBATCH --mail-type=END,FAIL
 set -euo pipefail
 module purge
 : "${SLURM_JOB_ID:?Submit this script through Slurm}"
@@ -15,6 +17,8 @@ module purge
 : "${OPENPI_REV:?Set the full 40-character commit SHA recorded at setup}"
 : "${OPENPI_DATA_HOME:?Set checkpoint cache on research storage}"
 : "${PI05_RUN_ROOT:?Set directory for job metadata on research storage}"
+export HF_HOME="${HF_HOME:-$PI05_RUN_ROOT/hf-cache}"
+export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$PI05_RUN_ROOT/cache}"
 export PI05_PORT="${PI05_PORT:-8000}"
 export PYTHONUNBUFFERED=1
 export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-4}"
@@ -66,6 +70,13 @@ np.save(run / 'synthetic-actions.npy', actions)
     'devices': [str(d) for d in devices],
     'note': 'Synthetic request only; does not establish task performance or inference RNG reproducibility.'}, indent=2))
 port = int(os.environ['PI05_PORT'])
+metadata = {**policy.metadata, 'openpi_revision': os.environ['OPENPI_REV'],
+            'configuration': 'pi05_droid',
+            'checkpoint': 'gs://openpi-assets/checkpoints/pi05_droid',
+            'action_horizon': 15, 'external_action_dim': 8,
+            'rng': 'upstream default key-0 stream; no per-episode reset',
+            'synthetic_warmup_calls': 1, 'slurm_job_id': os.environ['SLURM_JOB_ID']}
+(run / 'server-metadata.json').write_text(json.dumps(metadata, indent=2))
 print(f'WARMUP PASSED; serving on 127.0.0.1:{port}', flush=True)
-WebsocketPolicyServer(policy, host='127.0.0.1', port=port, metadata=policy.metadata).serve_forever()
+WebsocketPolicyServer(policy, host='127.0.0.1', port=port, metadata=metadata).serve_forever()
 PY
