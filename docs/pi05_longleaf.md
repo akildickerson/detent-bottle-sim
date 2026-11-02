@@ -1,0 +1,71 @@
+# Longleaf pretrained inference runbook
+
+Status: launcher syntax checked locally; account access, package installation, GPU execution, and SSH forwarding remain unverified. No credentials are stored here. Username: `akil@longleaf.unc.edu`. Enter password/MFA in the normal SSH flow, never in chat.
+
+## Prepare the environment
+
+Connect with `ssh akil@longleaf.unc.edu` (UNC VPN is required off campus). Check available storage and permissions before choosing a project root. UNC currently documents `/hickory/users/<o>/<n>/<onyen>` for newer accounts; older accounts may have `/work/users/...`. Do not assume either path exists. Install/download in an appropriate scheduled setup job; research workloads must not run on login nodes. [UNC getting started](https://help.rc.unc.edu/getting-started-on-longleaf)
+
+Set these variables in the remote shell, replacing paths:
+
+```bash
+export PI05_PROJECT=/absolute/research/storage/pi05
+export OPENPI_ROOT="$PI05_PROJECT/openpi"
+export OPENPI_DATA_HOME="$PI05_PROJECT/checkpoints"
+export PI05_RUN_ROOT="$PI05_PROJECT/runs"
+export UV_CACHE_DIR="$PI05_PROJECT/uv-cache"
+export HF_HOME="$PI05_PROJECT/hf-cache"
+mkdir -p "$PI05_PROJECT" "$PI05_RUN_ROOT"
+```
+
+In the scheduled setup environment, clone OpenPI via HTTPS with submodules. Record the exact revision and detach it; subsequent jobs require this SHA. This deliberately does not prescribe an untested commit. Keep the SHA in your experiment records and reuse it when installing the local client.
+
+```bash
+GIT_LFS_SKIP_SMUDGE=1 git clone --recurse-submodules https://github.com/Physical-Intelligence/openpi.git "$OPENPI_ROOT"
+cd "$OPENPI_ROOT"
+export OPENPI_REV=$(git rev-parse HEAD)
+git checkout --detach "$OPENPI_REV"
+printf '%s\n' "$OPENPI_REV" > "$PI05_PROJECT/openpi-revision.txt"
+GIT_LFS_SKIP_SMUDGE=1 uv sync --frozen --python 3.11
+```
+
+Use a separately installed `uv` available on your PATH. Follow the pinned checkout's installation instructions if they differ. OpenPI documents NVIDIA inference above 8 GB VRAM and tests Ubuntu 22.04; Longleaf uses RHEL 9, so host compatibility requires validation. Start with one A100/L40 rather than an 8 GB GPU. No training or PyTorch conversion is needed. [OpenPI installation and requirements](https://github.com/Physical-Intelligence/openpi#installation)
+
+## Submit and inspect
+
+Copy this simulator repository to research storage using your normal transfer method. From its root, submit:
+
+```bash
+export OPENPI_REV=$(cat "$PI05_PROJECT/openpi-revision.txt")
+sbatch --export=ALL scripts/pi05/serve_longleaf.sbatch
+squeue -u akil
+```
+
+The template requests one GPU in `a100-gpu,l40-gpu` with `gpu_access` QoS. Verify your account can use those partitions; override resources at submission if needed. Four CPUs, 32 GB RAM, and two hours are initial defaults, not measured requirements. [UNC Slurm examples](https://help.rc.unc.edu/longleaf-slurm-examples)
+
+Read `pi05-JOBID.log` and `$PI05_RUN_ROOT/job-JOBID/`. The launcher rejects revision drift, checks JAX sees a GPU, loads `pi05_droid`, runs one synthetic request, checks finite `(15,8)` output, saves warmup metadata, then serves. First startup may download weights and compile. The synthetic call advances the server's inference RNG; NumPy seed zero only fixes the synthetic request.
+
+## Connect and test
+
+The server binds to compute-node loopback. If SSH access to your allocated node is permitted, run locally, replacing COMPUTE_NODE with the hostname recorded by the job:
+
+```bash
+ssh -N -o ExitOnForwardFailure=yes -J akil@longleaf.unc.edu \
+  -L 8000:127.0.0.1:8000 akil@COMPUTE_NODE
+```
+
+This is a proposed topology, not a verified UNC access guarantee. If compute-node SSH is restricted, run the simulator/client on the allocated node in a separate environment, or use a forwarding method approved by UNC. A login-node-only tunnel cannot reach the compute-node loopback listener.
+
+The launcher reuses OpenPI's policy/server APIs with loopback binding instead of the upstream CLI's all-interface binding. Health requests to `/healthz` establish server reachability only. [Upstream server](https://github.com/Physical-Intelligence/openpi/blob/main/src/openpi/serving/websocket_policy_server.py)
+
+Install the lightweight `packages/openpi-client` from the same OpenPI commit into the simulator environment. Run from the simulator root:
+
+```bash
+.venv/bin/python -m scripts.pi05.smoke --out runs/pi05-smoke
+# Optional network-only test without rendering:
+.venv/bin/python -m scripts.pi05.smoke --synthetic --out runs/pi05-synthetic
+```
+
+The smoke script sends actual camera/proprioception observations without advancing robot motion. Require finite `(15,8)` output and save the inputs/output/latencies before trying a short hybrid episode. Upstream also supplies `examples/simple_client/main.py --env droid` for random-observation network tests. [OpenPI simple client](https://github.com/Physical-Intelligence/openpi/blob/main/examples/simple_client/main.py)
+
+Cancel unused allocations with `scancel JOBID`. Keep job logs, revision, dependency list, GPU information, warmup output, and subsequent smoke artifacts together. A successful smoke test establishes inference compatibility, not bottle-opening competence.
