@@ -46,6 +46,27 @@ def test_errors_only_and_missing_first_success(tmp_path):
     assert summary['first_success_ticks']['count'] == 0
 
 
+def test_bounded_diagnostics_are_separate_from_task_denominator(tmp_path):
+    save(tmp_path, 'full-success', success=True, reason='success', steps=715)
+    save(tmp_path, 'kind-marker', success=False, steps=395,
+         experiment_kind='bounded_motion_diagnostic')
+    save(tmp_path, 'flag-marker', success=True, steps=395,
+         diagnostic_limit_reached=True)
+
+    tracks = summarize([tmp_path])['tracks']
+    assert tracks['hybrid']['attempts'] == 1
+    assert tracks['hybrid']['completed_task_attempts'] == 1
+    assert tracks['hybrid']['successes'] == 1
+    assert tracks['hybrid']['success_rate'] == 1
+    diagnostic = tracks['hybrid:bounded_motion_diagnostic']
+    assert diagnostic['attempts'] == 2
+    assert diagnostic['bounded_diagnostic_attempts'] == 2
+    assert diagnostic['completed_task_attempts'] == 0
+    assert diagnostic['successes'] == 0
+    assert diagnostic['success_rate'] is None
+    assert diagnostic['wilson_95'] is None
+
+
 def test_llm_separate_and_invalid_results(tmp_path):
     save(tmp_path, 'script', controller='scripted')
     llm = save(tmp_path, 'llm', controller=None, scaffold='v3', mode='live', privileged=False, sensing='both')

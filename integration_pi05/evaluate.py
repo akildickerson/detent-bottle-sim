@@ -182,6 +182,10 @@ def run_episode(out, controller, episode, config):
         if handoff_stage == 'after_pinch' and controller != 'hybrid':
             raise ValueError('after_pinch handoff is supported only for hybrid VLA episodes')
         effective_prompt = config['prompt']
+        if mechanism_response is not None:
+            effective_prompt = format_task_prompt(config['prompt'], mechanism_response)
+            manifest['effective_prompt'] = effective_prompt
+            (out / 'run.json').write_text(json.dumps(manifest, indent=2))
         if controller == 'hybrid' and config.get('sampling_seed') is not None and handoff_stage != 'after_pinch':
             phase = 'inference'
             from .client import Client
@@ -189,7 +193,7 @@ def run_episode(out, controller, episode, config):
             preflight_client = Client(config['host'], config['port'], timeout=config['inference_timeout'],
                                       connection_timeout=config['connection_timeout'])
             try:
-                run_preflight(preflight_client, request(env._obs(), config['prompt'], config['external_camera']), out / 'preflight',
+                run_preflight(preflight_client, request(env._obs(), effective_prompt, config['external_camera']), out / 'preflight',
                               config['sampling_seed'], expected_instance=config['expected_server_instance'],
                               expected_policy=config['expected_policy'])
             finally:
@@ -206,8 +210,6 @@ def run_episode(out, controller, episode, config):
         phase = 'setup' if controller == 'hybrid' else 'scripted'
         for stage, arm, pos, rpy, gap, ticks in opening_sequence():
             if handoff_stage == 'after_pinch' and stage.startswith('3 / Fold'):
-                if mechanism_response is not None:
-                    effective_prompt = format_task_prompt(config['prompt'], mechanism_response)
                 setup_complete = True
                 manifest['effective_prompt'] = effective_prompt
                 (out / 'run.json').write_text(json.dumps(manifest, indent=2))

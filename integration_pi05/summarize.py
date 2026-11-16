@@ -60,23 +60,29 @@ def summarize(roots):
             if not _finite_nonnegative(record.get('steps')):
                 raise ValueError('Result must contain finite nonnegative steps')
             name = _track(record)
+            if (record.get('experiment_kind') == 'bounded_motion_diagnostic' or
+                    record.get('diagnostic_limit_reached') is True):
+                name += ':bounded_motion_diagnostic'
             groups.setdefault(name, []).append((path, record))
         except (ValueError, OSError, TypeError) as exc:
             invalid.append({'path': str(path), 'error': str(exc)})
     tracks = {}
     for name, rows in sorted(groups.items()):
+        bounded_diagnostic = name.endswith(':bounded_motion_diagnostic')
         excluded = [(p, r) for p, r in rows if r.get('error') or r.get('failure_category') in
                     ('infrastructure_failure', 'control_failure') or r.get('reason') in
                     ('provider_error', 'infrastructure_failure', 'control_failure')]
         excluded_paths = {p for p, _ in excluded}
-        completed = [(p, r) for p, r in rows if p not in excluded_paths]
+        completed = [] if bounded_diagnostic else [(p, r) for p, r in rows if p not in excluded_paths]
         successful = [(p, r) for p, r in completed if r['success']]
         # Legacy canonical runs have no pose field; preserve that uncertainty.
         poses = Counter(json.dumps(r.get('bottle_pose', 'unrecorded'), sort_keys=True) for _, r in rows)
         first_ticks = [r.get('first_success_tick') for _, r in successful]
         recorded_first = [v for v in first_ticks if _finite_nonnegative(v)]
         tracks[name] = {
-            'attempts': len(rows), 'completed_task_attempts': len(completed),
+            'attempts': len(rows),
+            'bounded_diagnostic_attempts': len(rows) if bounded_diagnostic else 0,
+            'completed_task_attempts': len(completed),
             'excluded_error_attempts': len(excluded), 'successes': len(successful),
             'success_rate': len(successful) / len(completed) if completed else None,
             'wilson_95': wilson(len(successful), len(completed)),

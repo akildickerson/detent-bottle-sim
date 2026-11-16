@@ -51,8 +51,9 @@ Output paths must be new. The default configuration uses the pinned public
 shows how to select front-view and left-wrist images with explicit inference-noise sampling.
 For a trained candidate, supply a configuration whose checkpoint URI and expected-policy
 contract exactly match the serving process. `mechanism_response` may carry a fixed normalized
-response descriptor when the selected checkpoint was trained with that prompt field. The
-generic evaluator does not perform a physical probe or estimate dynamics.
+response descriptor when the selected checkpoint was trained with that prompt field; the
+descriptor is included in requests for either handoff. The generic evaluator does not perform a
+physical probe or estimate dynamics.
 
 ## Scope and interpretation
 
@@ -60,7 +61,8 @@ generic evaluator does not perform a physical probe or estimate dynamics.
 episode and separates pipeline/setup failures from valid policy outcomes. One successful episode establishes
 feasibility only; it is not a success-rate estimate. For repeated trials, use independent task
 seeds or a prespecified paired design and report transport/evaluator errors separately from
-task failures.
+task failures. The result summarizer places bounded motion diagnostics in a separate group and
+excludes them from full-episode success rates and Wilson intervals.
 
 The π₀.₅ path is an optional integration example, not a replacement for the simulator's scripted
 baseline or other policy interfaces. Keep policy-specific dependencies and hardware launch
