@@ -9,6 +9,7 @@ class ActionAdapter:
         self.sim = sim
         self.scratch = mujoco.MjData(sim.model)
         self.clips = 0
+        self.last_diagnostics = None
 
     def apply(self, command, fraction=1):
         s = self.sim
@@ -19,13 +20,31 @@ class ActionAdapter:
             raise ValueError('fraction must be in (0, 1]')
         self.scratch.qpos[:] = s.data.qpos
         lo, hi = s.model.jnt_range[s.ids[0]].T
-        self.scratch.qpos[s.qids[0]] = np.clip(s.data.qpos[s.qids[0]] + .2 * np.clip(a[:7], -1, 1) * fraction, lo, hi)
+        pre_joint_pos = s.data.qpos[s.qids[0]].copy()
+        clipped_command = np.clip(a[:7], -1, 1)
+        raw_joint_target = pre_joint_pos + .2 * clipped_command * fraction
+        joint_target = np.clip(raw_joint_target, lo, hi)
+        self.scratch.qpos[s.qids[0]] = joint_target
         mujoco.mj_forward(s.model, self.scratch)
         pos = self.scratch.site_xpos[s.tips[0]].copy()
         bounded = np.clip(pos, *WORKSPACE)
         self.clips += int(np.any(pos != bounded))
         rot = self.scratch.site_xmat[s.tips[0]].reshape(3, 3)
-        s.target(0, bounded, Rotation.from_matrix(rot).as_euler('xyz', degrees=True), .09 * (1 - np.clip(a[7], 0, 1)))
+        closure = np.clip(a[7], 0, 1)
+        gap = .09 * (1 - closure)
+        s.target(0, bounded, Rotation.from_matrix(rot).as_euler('xyz', degrees=True), gap)
+        # Snapshot each conversion stage without changing live physics or control.
+        self.last_diagnostics = {
+            'command': a.copy(), 'fraction': float(fraction),
+            'pre_joint_pos': pre_joint_pos, 'clipped_joint_command': clipped_command,
+            'raw_joint_target': raw_joint_target, 'joint_target': joint_target,
+            'joint_action_clipped': a[:7] != clipped_command,
+            'joint_limit_clipped': raw_joint_target != joint_target,
+            'fk_pos': pos, 'fk_rotation': rot.copy(),
+            'bounded_target': bounded.copy(), 'workspace_clipped': pos != bounded,
+            'gripper_raw': float(a[7]), 'gripper_closure': float(closure),
+            'gripper_clipped': bool(a[7] != closure), 'gripper_gap': float(gap),
+        }
         return bounded
 
 

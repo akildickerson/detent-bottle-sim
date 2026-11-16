@@ -100,3 +100,55 @@ def test_malformed_server_metadata_closes_client():
         client.infer({})
     assert not client._process.is_alive()
     assert client.server_metadata == {}
+
+
+class ControlledMetadataPolicy(FakePolicy):
+    def get_server_metadata(self):
+        from integration_pi05.sampling import sampling_metadata
+        from integration_pi05.client import CONTROLLED_POLICY
+        return {**CONTROLLED_POLICY, 'sampling':sampling_metadata()}
+
+
+def test_controlled_connect_validates_without_inference():
+    with Client(policy_factory=ControlledMetadataPolicy, timeout=5) as client:
+        client.connect(controlled=True)
+        assert client.latencies == []
+        assert client._process.is_alive()
+
+
+def test_controlled_connect_rejects_legacy_before_inference():
+    client = Client(policy_factory=MetadataPolicy, timeout=5)
+    with pytest.raises(ValueError, match='sampling protocol'):
+        client.connect(controlled=True)
+    assert client.latencies == []
+    assert not client._process.is_alive()
+
+
+class MismatchedControlledPolicy(ControlledMetadataPolicy):
+    def get_server_metadata(self):
+        metadata = super().get_server_metadata()
+        metadata['checkpoint'] = 'wrong-checkpoint'
+        return metadata
+
+
+def test_controlled_connect_rejects_policy_provenance():
+    client = Client(policy_factory=MismatchedControlledPolicy, timeout=5)
+    with pytest.raises(ValueError, match='provenance mismatch'):
+        client.connect(controlled=True)
+    assert client.latencies == []
+    assert not client._process.is_alive()
+
+
+class InstanceControlledPolicy(ControlledMetadataPolicy):
+    def get_server_metadata(self):
+        return {**super().get_server_metadata(), 'server_instance_id':'persistent-A'}
+
+
+def test_expected_instance_is_optional_but_fail_closed_when_supplied():
+    with Client(policy_factory=InstanceControlledPolicy, timeout=5) as client:
+        client.connect(controlled=True, expected_instance='persistent-A')
+        assert client.infer({}).shape == (15,8)
+    client = Client(policy_factory=InstanceControlledPolicy, timeout=5)
+    with pytest.raises(ValueError,match='server instance mismatch'):
+        client.connect(controlled=True,expected_instance='restarted-B')
+    assert not client._process.is_alive() and client.latencies == []

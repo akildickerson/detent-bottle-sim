@@ -161,4 +161,4 @@ The Panda arm model and meshes in `detent_bottle/assets/panda/` come from robosu
 
 ## Optional π₀.₅ integration
 
-See [integration setup and limitations](docs/pi05_integration.md) for the pretrained DROID client, hybrid controller, evaluation CLI, and Longleaf job template.
+See [integration setup and limitations](docs/pi05_integration.md) for the pretrained DROID client, hybrid controller, evaluation CLI, and policy-server contract.
